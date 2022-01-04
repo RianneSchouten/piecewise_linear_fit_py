@@ -28,9 +28,9 @@ from scipy.optimize import fmin_l_bfgs_b
 from scipy import linalg
 from scipy import stats
 from pyDOE import lhs
+import statsmodels.api as sm
 
 # piecewise linear fit library
-
 
 class PiecewiseLinFit(object):
 
@@ -1082,14 +1082,67 @@ class PiecewiseLinFit(object):
         >>> slopes = my_pwlf.calc_slopes()
 
         """
+        #print(self.fit_breaks)
         y_hat = self.predict(self.fit_breaks)
         self.slopes = np.divide(
                     (y_hat[1:self.n_segments + 1] -
                      y_hat[:self.n_segments]),
                     (self.fit_breaks[1:self.n_segments + 1] -
-                     self.fit_breaks[:self.n_segments]))
+                     self.fit_breaks[:self.n_segments])) # this gives an error when the breakpoint is estimated to be at the same spot as the max x value
         self.intercepts = y_hat[0:-1] - self.slopes * self.fit_breaks[0:-1]
         return self.slopes
+
+    def calc_standard_errors_fit_breaks(self):
+        r"""
+        Calculate the standard error of the breakpoint; works for 1 breakpoint (2 segments).
+        Code is borrowed from function get_bp_standard_errors from package piecewise-regression,
+        (https://github.com/chasmani/piecewise-regression/). Method is based on Muggeo's paper 
+        “Estimating regression models with unknown break-points” (2003).
+
+        Returns 
+        -------
+        se: float
+            Standard error of the breakpoint
+        params: ndarray(1-D)
+            The estimated parameters given the breakpoint.
+            For 2 line segments, there are four parameters; constant, alpha, beta, gamma.
+            Here, beta is the difference in slopes between the two segments.
+            Therefore, alpha corresponds to calc_slopes()[0] and beta to calc_slopes[1] - calc_slopes[0].
+
+        Examples
+        --------
+        Calculate the standard error after performing a simple fit with 2 segments
+
+        >>> import pwlf
+        >>> x = np.linspace(0.0, 1.0, 10)
+        >>> y = np.random.random(10)
+        >>> my_pwlf = pwlf.PiecewiseLinFit(x, y)
+        >>> breaks = my_pwlf.fit(2)
+        >>> se, params = my_pwlf.calc_standard_errors_fit_breaks()
+        """
+
+        bp = self.fit_breaks[1]
+
+        Z = np.array([self.x_data])
+        U = [(self.x_data - bp) * np.heaviside(self.x_data - bp, 1)]
+        V = [np.heaviside(self.x_data - bp, 1)]
+        Z = np.concatenate((Z,U,V))
+        Z = Z.T
+        Z = sm.add_constant(Z, has_constant='add')
+
+        ls = sm.OLS(endog=self.y_data, exog=Z).fit()
+        cov_matrix = ls.cov_params()
+        params = ls.params
+    
+        gamma_var = cov_matrix[3,3]
+        beta_var = cov_matrix[2,2]
+        gamma_beta_covar = cov_matrix[2,3]
+        gamma = params[3]
+        beta = params[2]
+
+        se = np.sqrt((gamma_var + beta_var * (gamma/beta)**2 - 2 * (gamma/beta) * gamma_beta_covar) / (beta**2))
+
+        return se, params
 
     def standard_errors(self, method='linear', step_size=1e-4):
         r"""
