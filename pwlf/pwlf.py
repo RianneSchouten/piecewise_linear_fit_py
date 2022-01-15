@@ -1,3 +1,8 @@
+### Rianne: Forked from Github Version 2.0.5
+# Added one function that we currently do not use: calc_standard_errors_fit_breaks()
+# Commented out line 1542 (self.calc_slopes()) because it does not add to the optimization 
+# (see e-mail Charles Jekel 1/5/2022) and it gives an error when the bp is exactly the same as the min/max
+
 # -- coding: utf-8 --
 # MIT License
 #
@@ -1535,7 +1540,7 @@ class PiecewiseLinFit(object):
         self.beta = beta
 
         # save the slopes
-        self.calc_slopes()
+        #self.calc_slopes()
         return ssr
 
     def conlstsq(self, A):
